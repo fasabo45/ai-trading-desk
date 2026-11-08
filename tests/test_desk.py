@@ -10,10 +10,12 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from desk import analyst, chain, scanner                      # noqa: E402
+import config                                                 # noqa: E402
+from desk import analyst, chain, ops, scanner                  # noqa: E402
 from desk.broker import PaperBroker                           # noqa: E402
 from desk.risk import Account, check_stock_trade, check_token_trade  # noqa: E402
 from desk.watchlist import Watchlist                          # noqa: E402
@@ -191,6 +193,55 @@ class Untrusted(unittest.TestCase):
             parsed_output=thesis(score=14))))
         th = analyst.analyze_token(token(), {}, {}, client=fake)
         self.assertEqual(th.score, 10)            # clamped in code
+
+
+class ModelIds(unittest.TestCase):
+    """A retired model id is an .env fix, not a code change."""
+
+    def test_env_overrides_the_default(self):
+        with patch.dict(os.environ, {"ANALYST_MODEL": "a-newer-model"}):
+            self.assertEqual(config.analyst_model(), "a-newer-model")
+        self.assertEqual(config.analyst_model(), config.ANALYST_MODEL_DEFAULT)
+
+    def test_review_model_follows_the_same_rule(self):
+        with patch.dict(os.environ, {"REVIEW_MODEL": "a-cheaper-model"}):
+            self.assertEqual(config.review_model(), "a-cheaper-model")
+
+    def test_only_a_404_is_reported_as_a_bad_model(self):
+        self.assertTrue(ops.model_not_found(SimpleNamespace(status_code=404)))
+        self.assertFalse(ops.model_not_found(SimpleNamespace(status_code=500)))
+        self.assertFalse(ops.model_not_found(ValueError("rate limited")))
+
+    def test_a_rejected_model_id_says_what_to_do(self):
+        class Fake404(Exception):
+            status_code = 404
+
+        def boom(**kwargs):
+            raise Fake404("no such model")
+
+        fake = SimpleNamespace(messages=SimpleNamespace(parse=boom))
+        with self.assertRaises(RuntimeError) as caught:
+            analyst.analyze_token(token(), {}, {}, client=fake)
+        self.assertIn("ANALYST_MODEL", str(caught.exception))
+
+    def test_the_example_placeholder_counts_as_no_key(self):
+        """`sk-ant-...` is truthy, so presence alone would declare the desk ready."""
+        self.assertTrue(ops.key_is_placeholder(None))
+        self.assertTrue(ops.key_is_placeholder(""))
+        self.assertTrue(ops.key_is_placeholder("   "))
+        self.assertTrue(ops.key_is_placeholder("sk-ant-..."))
+        self.assertFalse(ops.key_is_placeholder("sk-ant-api03-realkey"))
+
+    def test_a_server_error_is_not_disguised_as_a_config_typo(self):
+        class Fake500(Exception):
+            status_code = 500
+
+        def boom(**kwargs):
+            raise Fake500("upstream exploded")
+
+        fake = SimpleNamespace(messages=SimpleNamespace(parse=boom))
+        with self.assertRaises(Fake500):
+            analyst.analyze_token(token(), {}, {}, client=fake)
 
 
 class PaperExits(unittest.TestCase):

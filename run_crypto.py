@@ -17,7 +17,7 @@ import requests
 from config import CYCLE_SECONDS, SCAN
 from desk import analyst, chain, scanner
 from desk.broker import PaperBroker
-from desk.ops import Bench, alert, journal, killed, load_env
+from desk.ops import Bench, alert, journal, killed, load_env, warn_missing_key
 from desk.risk import Account, check_token_trade
 from desk.watchlist import Watchlist
 
@@ -146,6 +146,7 @@ def main():
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
     load_env()
+    warn_missing_key()
     broker, bench, watch = PaperBroker(), Bench(), Watchlist()
     s = requests.Session()
     while True:

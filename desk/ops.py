@@ -15,6 +15,17 @@ from config import BENCH_MINUTES, DEFAULT_BENCH
 JOURNAL = Path("journal.jsonl")
 KILL_FILE = Path("KILL")
 
+MODEL_HINT = ("that model id was rejected. Set ANALYST_MODEL or REVIEW_MODEL in .env "
+              "to one your key can use, or edit the defaults in config.py")
+
+
+def model_not_found(e: Exception) -> bool:
+    """True only when the API says the model id itself is unknown.
+
+    Narrow on purpose: a 500 or a timeout must not be reported as a config typo.
+    """
+    return getattr(e, "status_code", None) == 404
+
 
 # ---------- journal: every decision, including every rejection ----------
 def journal(kind: str, **fields) -> dict:
@@ -58,6 +69,27 @@ def alert(text: str):
 # ---------- kill switch: create a file named KILL and the desk stops ----------
 def killed() -> bool:
     return KILL_FILE.exists()
+
+
+# ---------- startup guard: a missing key is a silent, expensive nothing ----------
+def key_is_placeholder(key: str | None) -> bool:
+    """Empty, absent, or still the `sk-ant-...` from .env.example.
+
+    The example placeholder is truthy, so a plain presence check would report the
+    desk as ready while it holds a key that cannot possibly authenticate.
+    """
+    key = (key or "").strip()
+    return not key or key.endswith("...")
+
+
+def warn_missing_key() -> bool:
+    """Without a key the scan still runs and every survivor dies at seat 3, cycle
+    after cycle, forever. Say so once instead of journaling it 1,440 times a day."""
+    if not key_is_placeholder(os.getenv("ANTHROPIC_API_KEY")):
+        return False
+    print("[!] ANTHROPIC_API_KEY is unset or still the .env.example placeholder.\n"
+          "    The scan will run, but every survivor fails at the analyst seat.")
+    return True
 
 
 def load_env(path: str = ".env"):

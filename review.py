@@ -11,8 +11,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config import REVIEW_MODEL
-from desk.ops import load_env
+from config import review_model
+from desk.ops import MODEL_HINT, load_env, model_not_found
 
 REVIEW_PROMPT = """You review a trading desk's week from its journal stats.
 Be blunt. No encouragement. Use the numbers given, invent none.
@@ -60,9 +60,15 @@ def main():
     if args.claude:
         load_env()
         from anthropic import Anthropic
-        msg = Anthropic().messages.create(
-            model=REVIEW_MODEL, max_tokens=4000, system=REVIEW_PROMPT,
-            messages=[{"role": "user", "content": json.dumps(s, default=str)}])
+        model = review_model()
+        try:
+            msg = Anthropic().messages.create(
+                model=model, max_tokens=4000, system=REVIEW_PROMPT,
+                messages=[{"role": "user", "content": json.dumps(s, default=str)}])
+        except Exception as e:
+            if not model_not_found(e):
+                raise
+            raise RuntimeError(f"model '{model}': {MODEL_HINT} ({e})") from e
         print("\n" + "".join(b.text for b in msg.content if b.type == "text"))
 
 

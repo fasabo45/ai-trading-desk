@@ -3,6 +3,7 @@
 These are STARTING values, not advice. Run in paper mode, read the journal,
 and move a number only when the journal tells you to.
 """
+import os
 
 # ---------- Seat 1: scanner (free cuts, data already in the GeckoTerminal batch) ----------
 SCAN = {
@@ -29,10 +30,21 @@ CHAIN = {
 }
 
 # ---------- Seat 3: analyst ----------
-ANALYST_MODEL = "claude-opus-5-5"
-REVIEW_MODEL = "claude-sonnet-5-5"   # cheaper model for the weekly review
+# Model ids get renamed and retired. An .env entry wins over the default, so a key
+# with a newer id needs no code change. These were the ids current when written.
+ANALYST_MODEL_DEFAULT = "claude-opus-4-5"
+REVIEW_MODEL_DEFAULT = "claude-sonnet-4-5"   # cheaper model for the weekly review
 ANALYST_MAX_TOKENS = 8_000
 MIN_SCORE = 7                        # 0-10, the analyst's score must clear this
+
+
+def analyst_model() -> str:
+    """Read at call time, not import time: .env is loaded after config is imported."""
+    return os.getenv("ANALYST_MODEL", ANALYST_MODEL_DEFAULT)
+
+
+def review_model() -> str:
+    return os.getenv("REVIEW_MODEL", REVIEW_MODEL_DEFAULT)
 
 # ---------- Seat 4: risk engine (pure code) ----------
 RISK = {

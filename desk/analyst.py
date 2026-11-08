@@ -13,7 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from config import ANALYST_MAX_TOKENS, ANALYST_MODEL
+from config import ANALYST_MAX_TOKENS, analyst_model
+from desk.ops import MODEL_HINT, model_not_found
 
 
 # ---------- the shapes the model must fill ----------
@@ -95,12 +96,27 @@ def token_state(t: dict, f: dict, links: dict) -> str:
             "Produce the thesis.")
 
 
-def analyze_token(t: dict, f: dict, links: dict, client=None) -> TokenThesis:
+def _parse(client=None, **kwargs):
+    """One place for the API call, and one place to explain a rejected model id.
+
+    A retired model id is a config typo, not a bug in the desk, so it should not
+    surface as a bare 404 three seats deep in a stack trace.
+    """
     if client is None:
         from anthropic import Anthropic   # imported late so tests run without the SDK
         client = Anthropic()
-    resp = client.messages.parse(
-        model=ANALYST_MODEL,
+    try:
+        return client.messages.parse(**kwargs)
+    except Exception as e:
+        if not model_not_found(e):
+            raise
+        raise RuntimeError(f"model '{kwargs.get('model')}': {MODEL_HINT} ({e})") from e
+
+
+def analyze_token(t: dict, f: dict, links: dict, client=None) -> TokenThesis:
+    resp = _parse(
+        client,
+        model=analyst_model(),
         max_tokens=ANALYST_MAX_TOKENS,
         system=TOKEN_PROMPT,
         messages=[{"role": "user", "content": token_state(t, f, links)}],
@@ -112,12 +128,10 @@ def analyze_token(t: dict, f: dict, links: dict, client=None) -> TokenThesis:
 
 
 def analyze_stock(symbol: str, market_data: str, news: list[str], client=None) -> StockThesis:
-    if client is None:
-        from anthropic import Anthropic
-        client = Anthropic()
     news_block = "\n\n".join(wrap_untrusted(n) for n in news) or "(no news)"
-    resp = client.messages.parse(
-        model=ANALYST_MODEL,
+    resp = _parse(
+        client,
+        model=analyst_model(),
         max_tokens=ANALYST_MAX_TOKENS,
         system=STOCK_PROMPT,
         messages=[{"role": "user", "content":
