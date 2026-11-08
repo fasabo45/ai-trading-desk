@@ -56,7 +56,7 @@ class Bench:
 # ---------- alerts: Telegram if configured, stdout otherwise ----------
 def alert(text: str):
     token, chat = os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
-    print(text)
+    print(text, flush=True)          # flushed: a piped run must not look frozen
     if token and chat:
         try:
             requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
@@ -88,7 +88,8 @@ def warn_missing_key() -> bool:
     if not key_is_placeholder(os.getenv("ANTHROPIC_API_KEY")):
         return False
     print("[!] ANTHROPIC_API_KEY is unset or still the .env.example placeholder.\n"
-          "    The scan will run, but every survivor fails at the analyst seat.")
+          "    The scan will run, but every survivor fails at the analyst seat.",
+          flush=True)
     return True
 
 

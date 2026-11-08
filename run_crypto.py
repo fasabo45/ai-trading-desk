@@ -161,12 +161,12 @@ def main():
         try:
             stats = cycle(broker, bench, watch, s, args.shadow)
             parked, next_wait_s = watch.pending(SCAN["min_age_minutes"])
-            print(cycle_line(stats, broker.equity(), parked, next_wait_s))
+            print(cycle_line(stats, broker.equity(), parked, next_wait_s), flush=True)
             if first_cycle and parked and not stats["entries"]:
-                print(maturity_note(parked, SCAN["min_age_minutes"]))
+                print(maturity_note(parked, SCAN["min_age_minutes"]), flush=True)
         except Exception as e:
             journal("error", stage="cycle", error=str(e))
-            print(f"cycle failed: {e}")
+            print(f"cycle failed: {e}", flush=True)
         first_cycle = False
         if args.once:
             return
