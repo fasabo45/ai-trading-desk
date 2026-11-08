@@ -13,7 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from config import ANALYST_MAX_TOKENS, analyst_model
+from config import (ANALYST_MAX_RETRIES, ANALYST_MAX_TOKENS, ANALYST_TIMEOUT_S,
+                    analyst_model)
 from desk.ops import MODEL_HINT, model_not_found
 
 
@@ -104,7 +105,10 @@ def _parse(client=None, **kwargs):
     """
     if client is None:
         from anthropic import Anthropic   # imported late so tests run without the SDK
-        client = Anthropic()
+        # Both bounds are set here on purpose. The defaults are 600s and two retries,
+        # so one stuck call could hold a 60-second cycle open for half an hour, and a
+        # silent desk is what an operator reads as a crash.
+        client = Anthropic(timeout=ANALYST_TIMEOUT_S, max_retries=ANALYST_MAX_RETRIES)
     try:
         return client.messages.parse(**kwargs)
     except Exception as e:

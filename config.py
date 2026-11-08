@@ -35,6 +35,11 @@ CHAIN = {
 ANALYST_MODEL_DEFAULT = "claude-opus-4-5"
 REVIEW_MODEL_DEFAULT = "claude-sonnet-4-5"   # cheaper model for the weekly review
 ANALYST_MAX_TOKENS = 8_000
+# The SDK defaults to a 600-second timeout and two retries. Three analyst calls per
+# cycle would then be up to half an hour with no output, which is indistinguishable
+# from a hung desk. One minute is generous for a scoring call and one retry is enough.
+ANALYST_TIMEOUT_S = 45.0
+ANALYST_MAX_RETRIES = 1
 MIN_SCORE = 7                        # 0-10, the analyst's score must clear this
 
 

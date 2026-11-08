@@ -10,7 +10,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -262,6 +262,36 @@ class ModelIds(unittest.TestCase):
         fake = SimpleNamespace(messages=SimpleNamespace(parse=boom))
         with self.assertRaises(Fake500):
             analyst.analyze_token(token(), {}, {}, client=fake)
+
+
+class AnalystCallBounds(unittest.TestCase):
+    """A stuck model call must not hold a 60-second cycle open for half an hour."""
+
+    def build_client(self):
+        ctor = MagicMock()
+        ctor.return_value.messages.parse.return_value = SimpleNamespace(parsed_output=thesis())
+        with patch.dict(sys.modules, {"anthropic": SimpleNamespace(Anthropic=ctor)}):
+            analyst.analyze_token(token(), {}, {})
+        return ctor.call_args.kwargs
+
+    def test_the_client_is_built_with_a_bounded_timeout(self):
+        # The SDK defaults are 600s and two retries. Left alone, three calls a cycle
+        # could be half an hour of silence, which reads exactly like a hung desk.
+        kwargs = self.build_client()
+        self.assertEqual(kwargs["timeout"], config.ANALYST_TIMEOUT_S)
+        self.assertEqual(kwargs["max_retries"], config.ANALYST_MAX_RETRIES)
+
+    def test_a_whole_cycle_of_worst_case_calls_stays_under_five_minutes(self):
+        calls = 3                                   # ANALYST_BUDGET in run_crypto.py
+        worst = config.ANALYST_TIMEOUT_S * (config.ANALYST_MAX_RETRIES + 1) * calls
+        self.assertLess(worst, 5 * 60)
+
+    def test_a_passed_in_client_keeps_its_own_settings(self):
+        # Tests and callers own their client; the desk must not re-wrap it.
+        mine = MagicMock()
+        mine.messages.parse.return_value = SimpleNamespace(parsed_output=thesis())
+        analyst.analyze_token(token(), {}, {}, client=mine)
+        self.assertTrue(mine.messages.parse.called)
 
 
 class CycleLine(unittest.TestCase):
