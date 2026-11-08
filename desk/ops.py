@@ -6,7 +6,7 @@ import os
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -34,6 +34,30 @@ def journal(kind: str, **fields) -> dict:
     with JOURNAL.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, default=str) + "\n")
     return row
+
+
+def read_journal(days: float | None = None, path: Path = JOURNAL) -> list[dict]:
+    """Every row, oldest first. `days` keeps only the recent tail.
+
+    One reader, because the weekly review and the UI must never disagree about
+    what the journal says. A truncated line (someone killed the process mid-write)
+    is skipped rather than allowed to blind the whole reader.
+    """
+    if not path.exists():
+        return []
+    cutoff = None if days is None else datetime.now(timezone.utc) - timedelta(days=days)
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if cutoff is not None and datetime.fromisoformat(row["time"]) < cutoff:
+            continue
+        rows.append(row)
+    return rows
 
 
 # ---------- bench: a rejected token sits out, for as long as its failure deserves ----------

@@ -16,7 +16,12 @@ import time
 
 
 class Watchlist:
-    def __init__(self, path: str = "desk.db"):
+    def __init__(self, path: str = "desk.db", readonly: bool = False):
+        # A reader (the UI) must never create the file, take a write lock, or
+        # race the desk mid-write. mode=ro gives it none of those powers.
+        if readonly:
+            self.db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            return
         self.db = sqlite3.connect(path)
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS watchlist("
@@ -59,17 +64,29 @@ class Watchlist:
         self.db.execute("DELETE FROM watchlist WHERE mint=?", (mint,))
         self.db.commit()
 
-    def pending(self, min_age_minutes: float) -> tuple[int, float]:
-        """(pools still waiting, seconds until the next one matures).
+    def soonest(self, min_age_minutes: float, limit: int | None = None) -> list[dict]:
+        """Parked pools that can still mature, soonest first.
 
         Addressless pools are excluded because `due()` drops them: they can never
-        mature, so counting them would promise a re-read that never comes.
+        mature, so reporting a wait for one would promise a re-read that never comes.
         """
         now = time.time()
-        waits = [min_age_minutes * 60 - (now - held_at)
-                 for pool, held_at in self.db.execute("SELECT pool, held_at FROM watchlist")
-                 if pool]
-        return len(waits), max(min(waits, default=0.0), 0.0)
+        out = []
+        for mint, pool, dex, symbol, held_at in self.db.execute(
+                "SELECT mint, pool, dex, symbol, held_at FROM watchlist"):
+            if not pool:
+                continue
+            waited_s = now - held_at
+            out.append({"mint": mint, "pool": pool, "dex": dex, "symbol": symbol,
+                        "waited_min": round(waited_s / 60, 1),
+                        "ready_in_s": round(min_age_minutes * 60 - waited_s, 1)})
+        out.sort(key=lambda r: r["ready_in_s"])
+        return out[:limit] if limit else out
+
+    def pending(self, min_age_minutes: float) -> tuple[int, float]:
+        """(pools still waiting, seconds until the next one matures)."""
+        rows = self.soonest(min_age_minutes)
+        return len(rows), max(rows[0]["ready_in_s"], 0.0) if rows else 0.0
 
     def size(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]

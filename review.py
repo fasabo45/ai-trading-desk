@@ -8,11 +8,9 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from config import ANALYST_MAX_RETRIES, ANALYST_TIMEOUT_S, review_model
-from desk.ops import MODEL_HINT, load_env, make_output_safe, model_not_found
+from desk.ops import MODEL_HINT, load_env, make_output_safe, model_not_found, read_journal
 
 REVIEW_PROMPT = """You review a trading desk's week from its journal stats.
 Be blunt. No encouragement. Use the numbers given, invent none.
@@ -22,12 +20,7 @@ Be blunt. No encouragement. Use the numbers given, invent none.
 
 
 def load(days: int = 7) -> list[dict]:
-    p = Path("journal.jsonl")
-    if not p.exists():
-        return []
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
-    return [r for r in rows if datetime.fromisoformat(r["time"]) >= since]
+    return read_journal(days)
 
 
 def stats(rows: list[dict]) -> dict:
