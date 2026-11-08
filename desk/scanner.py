@@ -61,8 +61,18 @@ def parse_pool(pool: dict, symbols: dict[str, str]) -> dict | None:
     }
 
 
+def _symbols(body: dict) -> dict[str, str]:
+    """The `included` token records -> {base_token id: ticker}."""
+    return {i["id"]: i["attributes"].get("symbol", "?")
+            for i in body.get("included", []) if i.get("type") == "token"}
+
+
 def new_tokens(session: requests.Session | None = None) -> list[dict]:
-    """Fresh pools on Solana, newest first, deduplicated by mint."""
+    """Fresh pools on Solana, newest first, deduplicated by mint.
+
+    These are minutes old by definition, so most of them fail `min_age_minutes`.
+    They are not rejected for it: `too_young` sends them to the watchlist.
+    """
     s = session or requests.Session()
     out, seen = [], set()
     for page in range(1, SCAN["pages"] + 1):
@@ -74,8 +84,7 @@ def new_tokens(session: requests.Session | None = None) -> list[dict]:
             break
         r.raise_for_status()
         body = r.json()
-        symbols = {i["id"]: i["attributes"].get("symbol", "?")
-                   for i in body.get("included", []) if i.get("type") == "token"}
+        symbols = _symbols(body)
         for pool in body.get("data", []):
             t = parse_pool(pool, symbols)
             if not t or t["mint"] in seen:
@@ -87,10 +96,36 @@ def new_tokens(session: requests.Session | None = None) -> list[dict]:
     return out
 
 
+def pool_snapshot(address: str, session: requests.Session | None = None) -> dict | None:
+    """Re-read one pool by address, in the same shape `new_tokens` returns.
+
+    A pool first seen at two minutes old has worthless numbers: no volume yet,
+    no trades yet. By the time it is old enough to judge, its row has scrolled
+    off `new_pools`, so the desk has to ask for it by name.
+    """
+    s = session or requests.Session()
+    r = s.get(f"{GT}/networks/solana/pools/{address}",
+              params={"include": "base_token,dex"}, headers=HEADERS, timeout=20)
+    if r.status_code == 429:
+        time.sleep(60)
+        return None
+    r.raise_for_status()
+    body = r.json()
+    if not body.get("data"):
+        return None
+    return parse_pool(body["data"], _symbols(body))
+
+
 def free_kill(t: dict) -> str | None:
-    """Pass one. Pure arithmetic on data we already hold. Returns the failed check or None."""
-    if not SCAN["min_age_minutes"] <= t["age_minutes"] <= SCAN["max_age_hours"] * 60:
-        return "age"
+    """Pass one. Pure arithmetic on data we already hold. Returns the failed check or None.
+
+    "too_young" is not a rejection. The caller holds that pool on the watchlist
+    and judges it again once it crosses the age floor. "too_old" is a rejection.
+    """
+    if t["age_minutes"] < SCAN["min_age_minutes"]:
+        return "too_young"
+    if t["age_minutes"] > SCAN["max_age_hours"] * 60:
+        return "too_old"
     if t["liquidity_usd"] < SCAN["min_liquidity_usd"]:
         return "liquidity"
     if t["volume_h1"] < SCAN["min_volume_h1_usd"]:

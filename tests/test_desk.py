@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desk import analyst, chain, scanner                      # noqa: E402
 from desk.broker import PaperBroker                           # noqa: E402
 from desk.risk import Account, check_stock_trade, check_token_trade  # noqa: E402
+from desk.watchlist import Watchlist                          # noqa: E402
 
 NOON = datetime(2026, 10, 26, 12, 0)
 
@@ -40,7 +41,8 @@ class FreeKill(unittest.TestCase):
         self.assertIsNone(scanner.free_kill(token()))
 
     def test_each_cut(self):
-        self.assertEqual(scanner.free_kill(token(age_minutes=3)), "age")
+        self.assertEqual(scanner.free_kill(token(age_minutes=3)), "too_young")
+        self.assertEqual(scanner.free_kill(token(age_minutes=400)), "too_old")
         self.assertEqual(scanner.free_kill(token(liquidity_usd=1_000)), "liquidity")
         self.assertEqual(scanner.free_kill(token(volume_h1=500)), "volume")
         self.assertEqual(scanner.free_kill(token(mcap_usd=9_000_000)), "mcap")
@@ -60,6 +62,41 @@ class FreeKill(unittest.TestCase):
         self.assertEqual((t["mint"], t["symbol"], t["dex"]), ("MINT", "DOG", "pump-fun"))
         self.assertEqual(t["mcap_usd"], 150_000)        # falls back to FDV
         self.assertAlmostEqual(t["age_minutes"], 30, delta=1)
+
+
+class WatchlistHolds(unittest.TestCase):
+    """`new_pools` is always too young, so a pool must be held, not rejected."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.w = Watchlist(os.path.join(self.tmp.name, "desk.db"))
+
+    def tearDown(self):
+        self.w.db.close()
+        self.tmp.cleanup()
+
+    def test_hold_is_one_shot_and_does_not_reset_its_clock(self):
+        dog = {"mint": "M", "pool": "P", "dex": "pump-fun", "symbol": "DOG"}
+        self.assertTrue(self.w.hold(dog))           # first sight: parked
+        self.assertFalse(self.w.hold(dog))          # seen again: ignored, clock keeps running
+        self.assertEqual(self.w.size(), 1)
+
+    def test_not_due_until_it_has_matured(self):
+        self.w.hold({"mint": "M", "pool": "P", "dex": "pump-fun", "symbol": "DOG"})
+        self.assertEqual(self.w.due(10, 6), [])     # waited 0 minutes, floor is 10
+        self.assertEqual(len(self.w.due(0, 6)), 1)  # no floor, so due immediately
+
+    def test_expired_pools_are_dropped(self):
+        self.w.hold({"mint": "A", "pool": "P", "dex": "pump-fun", "symbol": "OLD"})
+        self.w.db.execute("UPDATE watchlist SET held_at = held_at - 7 * 3600")
+        self.w.db.commit()
+        self.assertEqual(self.w.due(10, 6), [])
+        self.assertEqual(self.w.size(), 0)
+
+    def test_addressless_pools_are_dropped(self):
+        self.w.hold({"mint": "B", "pool": None, "dex": "pump-fun", "symbol": "NOADDR"})
+        self.assertEqual(self.w.due(0, 6), [])      # cannot re-read it, so stop trying
+        self.assertEqual(self.w.size(), 0)
 
 
 class ChainFacts(unittest.TestCase):

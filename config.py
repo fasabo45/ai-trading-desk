@@ -69,6 +69,6 @@ BENCH_MINUTES = {
     "mint_authority": 100_000, "freeze_authority": 100_000,
     "top_wallet": 120, "top_10": 120, "no_sells": 240,
     "skip": 60, "watch": 15, "score": 20,
-    "age": 10, "liquidity": 10, "volume": 10, "mcap": 15, "trades": 10,
+    "too_old": 10, "liquidity": 10, "volume": 10, "mcap": 15, "trades": 10,
 }
 DEFAULT_BENCH = 30

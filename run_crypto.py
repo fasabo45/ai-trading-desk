@@ -14,14 +14,16 @@ import time
 
 import requests
 
-from config import CYCLE_SECONDS
+from config import CYCLE_SECONDS, SCAN
 from desk import analyst, chain, scanner
 from desk.broker import PaperBroker
 from desk.ops import Bench, alert, journal, killed, load_env
 from desk.risk import Account, check_token_trade
+from desk.watchlist import Watchlist
 
 CHAIN_BUDGET = 8      # RPC fact checks per cycle
 ANALYST_BUDGET = 3    # Claude calls per cycle: caps the bill no matter what the market does
+WATCH_BUDGET = 6      # re-reads of matured pools per cycle: GeckoTerminal allows ~10 calls/min
 
 
 def manage_positions(broker: PaperBroker, bench: Bench, s: requests.Session):
@@ -38,12 +40,36 @@ def manage_positions(broker: PaperBroker, bench: Bench, s: requests.Session):
                   + (f" | pnl ${fill['pnl_usd']}" if "pnl_usd" in fill else ""))
 
 
-def cycle(broker: PaperBroker, bench: Bench, s: requests.Session, shadow: bool) -> dict:
-    stats = {"seen": 0, "benched": 0, "free": 0, "chain": 0, "analyst": 0, "risk": 0, "entries": 0}
+def candidates(s: requests.Session, watch: Watchlist) -> list[dict]:
+    """This cycle's fresh pools, plus watchlisted pools that have finally matured.
+
+    `new_pools` only ever returns pools a couple of minutes old, so on its own it
+    can never satisfy `min_age_minutes`. The watchlist is what closes that gap.
+    """
+    tokens = scanner.new_tokens(s)
+    fresh = {t["mint"] for t in tokens}
+    for w in watch.due(SCAN["min_age_minutes"], SCAN["max_age_hours"])[:WATCH_BUDGET]:
+        if w["mint"] in fresh:          # already in this batch; leave it parked
+            continue
+        watch.drop(w["mint"])           # one re-read per mint, success or not
+        try:
+            t = scanner.pool_snapshot(w["pool"], s)
+        except Exception as e:
+            journal("error", stage="snapshot", mint=w["mint"], error=str(e))
+            continue                     # missing is missing, not a pass
+        if t:
+            tokens.append(t)
+    return tokens
+
+
+def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
+          s: requests.Session, shadow: bool) -> dict:
+    stats = {"seen": 0, "benched": 0, "held": 0, "free": 0,
+             "chain": 0, "analyst": 0, "risk": 0, "entries": 0}
     manage_positions(broker, bench, s)
 
     chain_left, analyst_left = CHAIN_BUDGET, ANALYST_BUDGET
-    tokens = scanner.new_tokens(s)
+    tokens = candidates(s, watch)
     tokens.sort(key=lambda t: t["volume_h1"] / max(t["mcap_usd"], 1), reverse=True)
 
     for t in tokens:
@@ -53,8 +79,12 @@ def cycle(broker: PaperBroker, bench: Bench, s: requests.Session, shadow: bool) 
             continue
 
         if (k := scanner.free_kill(t)):                       # pass 1: free
-            bench.sit(t["mint"], k)
-            stats["free"] += 1
+            if k == "too_young":
+                watch.hold(t)                                 # not a no: a not yet
+                stats["held"] += 1
+            else:
+                bench.sit(t["mint"], k)
+                stats["free"] += 1
             continue
         if chain_left <= 0 or analyst_left <= 0:
             break                                             # out of budget, not out of ideas
@@ -112,7 +142,8 @@ def main():
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
     load_env()
-    broker, bench, s = PaperBroker(), Bench(), requests.Session()
+    broker, bench, watch = PaperBroker(), Bench(), Watchlist()
+    s = requests.Session()
     while True:
         if killed():
             for mint in list(broker.s["positions"]):
@@ -121,7 +152,7 @@ def main():
             alert("KILL file found. All paper positions closed. Desk stopped.")
             return
         try:
-            stats = cycle(broker, bench, s, args.shadow)
+            stats = cycle(broker, bench, watch, s, args.shadow)
             print(f"cycle {stats} equity ${broker.equity()}")
         except Exception as e:
             journal("error", stage="cycle", error=str(e))
