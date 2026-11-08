@@ -64,8 +64,9 @@ def candidates(s: requests.Session, watch: Watchlist) -> list[dict]:
 
 def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
           s: requests.Session, shadow: bool) -> dict:
-    stats = {"seen": 0, "benched": 0, "held": 0, "free": 0,
-             "chain": 0, "analyst": 0, "risk": 0, "entries": 0}
+    # Every key says what it counts: kills, rejections, or approvals.
+    stats = {"seen": 0, "benched": 0, "held": 0, "free_kills": 0, "chain_kills": 0,
+             "analyst_rejects": 0, "risk_rejects": 0, "entries": 0}
     manage_positions(broker, bench, s)
 
     chain_left, analyst_left = CHAIN_BUDGET, ANALYST_BUDGET
@@ -87,7 +88,7 @@ def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
                 bench.sit(t["mint"], k)
                 journal("reject", stage="free", mint=t["mint"], symbol=t["symbol"],
                         reason=k, token=t)
-                stats["free"] += 1
+                stats["free_kills"] += 1
             continue
         if chain_left <= 0 or analyst_left <= 0:
             break                                             # out of budget, not out of ideas
@@ -101,7 +102,7 @@ def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
         if (k := chain.chain_kill(f)):
             bench.sit(t["mint"], k)
             journal("reject", stage="chain", mint=t["mint"], symbol=t["symbol"], reason=k, facts=f)
-            stats["chain"] += 1
+            stats["chain_kills"] += 1
             continue
 
         links = scanner.socials(t["mint"], s)                 # pass 3: analyst
@@ -120,7 +121,7 @@ def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
                 reason=reason, shadow=shadow)
         if not ok:
             bench.sit(t["mint"], th.verdict if th.verdict != "valid_setup" else "score")
-            stats["analyst" if th.verdict != "valid_setup" else "risk"] += 1
+            stats["analyst_rejects" if th.verdict != "valid_setup" else "risk_rejects"] += 1
             continue
 
         flags = "; ".join(th.red_flags[:2]) or "none"
