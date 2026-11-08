@@ -381,6 +381,14 @@ class CycleLine(unittest.TestCase):
         self.assertIn("10-minute floor", note)
         self.assertIn("not a stall", note)
 
+    def test_the_note_is_only_for_a_run_that_has_decided_nothing(self):
+        self.assertTrue(ops.undecided(self.stats(seen=38, held=38)))
+        # Any kill, rejection or entry means the desk is visibly working, so the
+        # "first decisions are still coming" note would be a lie.
+        for decided in ({"free_kills": 1}, {"chain_kills": 1}, {"analyst_rejects": 1},
+                        {"risk_rejects": 1}, {"entries": 1}):
+            self.assertFalse(ops.undecided(self.stats(**decided)), decided)
+
 
 class PaperExits(unittest.TestCase):
     def setUp(self):

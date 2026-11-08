@@ -154,6 +154,18 @@ def maturity_note(parked: int, min_age_minutes: float) -> str:
             f"minutes of a run starting.")
 
 
+def undecided(stats: dict) -> bool:
+    """True only while the desk has ruled on nothing yet.
+
+    The maturity note is about an empty first ten minutes. Once a pool has been
+    killed, rejected or bought, the run is visibly working and the note claiming
+    decisions are still to come is just wrong.
+    """
+    return not (stats["free_kills"] or stats["chain_kills"]
+                or stats["analyst_rejects"] or stats["risk_rejects"]
+                or stats["entries"])
+
+
 def load_env(path: str = ".env"):
     """Tiny .env loader so the desk has no extra dependency. Real env vars win."""
     p = Path(path)

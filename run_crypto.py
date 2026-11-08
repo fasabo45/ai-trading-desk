@@ -18,7 +18,7 @@ from config import CYCLE_SECONDS, SCAN
 from desk import analyst, chain, scanner
 from desk.broker import PaperBroker
 from desk.ops import (Bench, alert, cycle_line, journal, killed, load_env,
-                      make_output_safe, maturity_note, warn_missing_key)
+                      make_output_safe, maturity_note, undecided, warn_missing_key)
 from desk.risk import Account, check_token_trade
 from desk.watchlist import Watchlist
 
@@ -163,7 +163,7 @@ def main():
             stats = cycle(broker, bench, watch, s, args.shadow)
             parked, next_wait_s = watch.pending(SCAN["min_age_minutes"])
             print(cycle_line(stats, broker.equity(), parked, next_wait_s), flush=True)
-            if first_cycle and parked and not stats["entries"]:
+            if first_cycle and parked and undecided(stats):
                 print(maturity_note(parked, SCAN["min_age_minutes"]), flush=True)
         except Exception as e:
             journal("error", stage="cycle", error=str(e))
