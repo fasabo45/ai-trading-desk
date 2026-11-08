@@ -11,8 +11,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config import review_model
-from desk.ops import MODEL_HINT, load_env, model_not_found
+from config import ANALYST_MAX_RETRIES, ANALYST_TIMEOUT_S, review_model
+from desk.ops import MODEL_HINT, load_env, make_output_safe, model_not_found
 
 REVIEW_PROMPT = """You review a trading desk's week from its journal stats.
 Be blunt. No encouragement. Use the numbers given, invent none.
@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--claude", action="store_true")
     ap.add_argument("--days", type=int, default=7)
     args = ap.parse_args()
+    make_output_safe()
     s = stats(load(args.days))
     print(json.dumps(s, indent=1, default=str))
     if args.claude:
@@ -62,7 +63,7 @@ def main():
         from anthropic import Anthropic
         model = review_model()
         try:
-            msg = Anthropic().messages.create(
+            msg = Anthropic(timeout=ANALYST_TIMEOUT_S, max_retries=ANALYST_MAX_RETRIES).messages.create(
                 model=model, max_tokens=4000, system=REVIEW_PROMPT,
                 messages=[{"role": "user", "content": json.dumps(s, default=str)}])
         except Exception as e:

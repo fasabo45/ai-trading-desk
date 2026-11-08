@@ -2,6 +2,7 @@
 
     python -m unittest discover -s tests -v
 """
+import io
 import os
 import sys
 import tempfile
@@ -292,6 +293,46 @@ class AnalystCallBounds(unittest.TestCase):
         mine.messages.parse.return_value = SimpleNamespace(parsed_output=thesis())
         analyst.analyze_token(token(), {}, {}, client=mine)
         self.assertTrue(mine.messages.parse.called)
+
+
+class OutputEncoding(unittest.TestCase):
+    """A token name is third-party data, so it must not be able to kill a cycle."""
+
+    def cp1252_console(self):
+        """What stdout looks like when redirected on Windows."""
+        buf = io.BytesIO()
+        return io.TextIOWrapper(buf, encoding="cp1252", errors="strict"), buf
+
+    def test_the_crash_is_real(self):
+        # Pin the reason this exists: without the fix, this raises.
+        stream, _ = self.cp1252_console()
+        with self.assertRaises(UnicodeEncodeError):
+            stream.write("木槌")
+
+    def test_a_japanese_symbol_survives_after_the_fix(self):
+        stream, buf = self.cp1252_console()
+        ops.make_output_safe(stream)
+        print("木槌 狂鶏", file=stream, flush=True)
+        self.assertIn(b"?", buf.getvalue())        # replaced, not crashed on
+
+    def test_ordinary_text_is_untouched(self):
+        stream, buf = self.cp1252_console()
+        ops.make_output_safe(stream)
+        print("VALID SETUP $DOGE", file=stream, flush=True)
+        self.assertEqual(buf.getvalue().strip(), b"VALID SETUP $DOGE")
+
+    def test_a_stream_with_no_reconfigure_is_left_alone(self):
+        s = io.StringIO()                          # reconfigure does not exist here
+        ops.make_output_safe(s)                    # must not raise
+        print("木槌", file=s)
+        self.assertIn("木槌", s.getvalue())
+
+    def test_alert_with_a_cjk_symbol_still_rings(self):
+        stream, buf = self.cp1252_console()
+        ops.make_output_safe(stream)
+        with patch.object(sys, "stdout", stream):
+            ops.alert("VALID SETUP $木槌 score 8/10")
+        self.assertIn(b"VALID SETUP", buf.getvalue())
 
 
 class CycleLine(unittest.TestCase):

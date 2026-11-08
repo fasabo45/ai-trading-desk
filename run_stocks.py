@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from config import STOCK_CYCLE_SECONDS
 from desk.analyst import analyze_stock
-from desk.ops import alert, journal, killed, load_env
+from desk.ops import alert, journal, killed, load_env, make_output_safe
 from desk.risk import ALLOWED_SYMBOLS, Account, check_stock_trade
 
 
@@ -82,6 +82,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
+    make_output_safe()
     load_env()
     trading, data, news = clients()
     while True:

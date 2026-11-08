@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +55,23 @@ class Bench:
 
 
 # ---------- alerts: Telegram if configured, stdout otherwise ----------
+# ---------- talking to a console that cannot spell the token's name ----------
+def make_output_safe(stream=None) -> None:
+    """Never let an untrusted token name kill a cycle.
+
+    Windows uses cp1252 for stdout when it is a pipe or a file, so printing a
+    symbol like `木槌` raises UnicodeEncodeError. A token name is third-party data,
+    which means the desk must survive anything the deployer types. Unencodable
+    characters become `?` instead of taking the cycle down with them.
+
+    Called once at the start of each entry point, because each one is its own
+    process and only the first print needs it.
+    """
+    out = stream if stream is not None else sys.stdout
+    if hasattr(out, "reconfigure"):
+        out.reconfigure(errors="replace")
+
+
 def alert(text: str):
     token, chat = os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
     print(text, flush=True)          # flushed: a piped run must not look frozen

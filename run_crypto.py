@@ -18,7 +18,7 @@ from config import CYCLE_SECONDS, SCAN
 from desk import analyst, chain, scanner
 from desk.broker import PaperBroker
 from desk.ops import (Bench, alert, cycle_line, journal, killed, load_env,
-                      maturity_note, warn_missing_key)
+                      make_output_safe, maturity_note, warn_missing_key)
 from desk.risk import Account, check_token_trade
 from desk.watchlist import Watchlist
 
@@ -146,6 +146,7 @@ def main():
     ap.add_argument("--shadow", action="store_true")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
+    make_output_safe()
     load_env()
     warn_missing_key()
     broker, bench, watch = PaperBroker(), Bench(), Watchlist()
