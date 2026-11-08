@@ -138,7 +138,10 @@ def cycle_line(stats: dict, equity: float, parked: int = 0,
     parts.append(f"{stats['entries']} entries")
     parts.append(f"equity ${equity:,.2f}")
     if parked:
-        parts.append(f"{parked} parked, next in {human_wait(next_wait_s)}")
+        # Pools past the floor but not yet re-read (WATCH_BUDGET caps the re-reads per
+        # cycle) are ripe and queued, not due in zero minutes.
+        parts.append(f"{parked} parked, " + ("next ready now" if next_wait_s < 1
+                                            else f"next ready in {human_wait(next_wait_s)}"))
     return "cycle " + " | ".join(parts)
 
 

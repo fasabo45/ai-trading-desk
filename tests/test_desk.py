@@ -354,8 +354,14 @@ class CycleLine(unittest.TestCase):
         line = ops.cycle_line(self.stats(seen=38), 1_000, parked=38, next_wait_s=605)
         self.assertIn("38 seen", line)
         self.assertIn("0 entries", line)
-        self.assertIn("38 parked, next in 10m 05s", line)
+        self.assertIn("38 parked, next ready in 10m 05s", line)
         self.assertIn("equity $1,000.00", line)
+
+    def test_a_ripe_pool_is_queued_not_due_in_zero_minutes(self):
+        # WATCH_BUDGET re-reads six per cycle, so ripe pools can sit queued.
+        line = ops.cycle_line(self.stats(seen=39), 1_000, parked=171, next_wait_s=0.0)
+        self.assertIn("171 parked, next ready now", line)
+        self.assertNotIn("next ready in", line)
 
     def test_kills_and_rejections_are_summed_because_they_are_the_same_outcome(self):
         line = ops.cycle_line(self.stats(free_kills=2, chain_kills=3,
