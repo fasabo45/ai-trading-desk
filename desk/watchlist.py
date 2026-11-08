@@ -59,5 +59,17 @@ class Watchlist:
         self.db.execute("DELETE FROM watchlist WHERE mint=?", (mint,))
         self.db.commit()
 
+    def pending(self, min_age_minutes: float) -> tuple[int, float]:
+        """(pools still waiting, seconds until the next one matures).
+
+        Addressless pools are excluded because `due()` drops them: they can never
+        mature, so counting them would promise a re-read that never comes.
+        """
+        now = time.time()
+        waits = [min_age_minutes * 60 - (now - held_at)
+                 for pool, held_at in self.db.execute("SELECT pool, held_at FROM watchlist")
+                 if pool]
+        return len(waits), max(min(waits, default=0.0), 0.0)
+
     def size(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]

@@ -17,7 +17,8 @@ import requests
 from config import CYCLE_SECONDS, SCAN
 from desk import analyst, chain, scanner
 from desk.broker import PaperBroker
-from desk.ops import Bench, alert, journal, killed, load_env, warn_missing_key
+from desk.ops import (Bench, alert, cycle_line, journal, killed, load_env,
+                      maturity_note, warn_missing_key)
 from desk.risk import Account, check_token_trade
 from desk.watchlist import Watchlist
 
@@ -149,6 +150,7 @@ def main():
     warn_missing_key()
     broker, bench, watch = PaperBroker(), Bench(), Watchlist()
     s = requests.Session()
+    first_cycle = True
     while True:
         if killed():
             for mint in list(broker.s["positions"]):
@@ -158,10 +160,14 @@ def main():
             return
         try:
             stats = cycle(broker, bench, watch, s, args.shadow)
-            print(f"cycle {stats} equity ${broker.equity()}")
+            parked, next_wait_s = watch.pending(SCAN["min_age_minutes"])
+            print(cycle_line(stats, broker.equity(), parked, next_wait_s))
+            if first_cycle and parked and not stats["entries"]:
+                print(maturity_note(parked, SCAN["min_age_minutes"]))
         except Exception as e:
             journal("error", stage="cycle", error=str(e))
             print(f"cycle failed: {e}")
+        first_cycle = False
         if args.once:
             return
         time.sleep(CYCLE_SECONDS)

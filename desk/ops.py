@@ -92,6 +92,46 @@ def warn_missing_key() -> bool:
     return True
 
 
+# ---------- status line: a cycle must say what happened, not just dump a dict ----------
+def human_wait(seconds: float) -> str:
+    """A wait a human can read. Never negative: "due now" is not "-4m"."""
+    seconds = max(0.0, float(seconds))
+    if seconds < 1:
+        return "now"
+    minutes, secs = divmod(int(round(seconds)), 60)
+    return f"{minutes}m {secs:02d}s" if minutes else f"{secs}s"
+
+
+def cycle_line(stats: dict, equity: float, parked: int = 0,
+               next_wait_s: float = 0.0) -> str:
+    """One line per cycle that answers "is anything happening?".
+
+    The dict this replaces read as `{'held': 38, 'entries': 0}`, which was true
+    and looked like a hung process: those 38 pools were parked by design, because
+    `new_pools` only returns minutes-old pools and the scanner has a 10-minute
+    floor. So say "parked, next in 9m" instead of leaving the operator to guess.
+    """
+    parts = [f"{stats['seen']} seen"]
+    if (kills := stats["free_kills"] + stats["chain_kills"]):
+        parts.append(f"{kills} killed")
+    if (rejects := stats["analyst_rejects"] + stats["risk_rejects"]):
+        parts.append(f"{rejects} rejected")
+    parts.append(f"{stats['entries']} entries")
+    parts.append(f"equity ${equity:,.2f}")
+    if parked:
+        parts.append(f"{parked} parked, next in {human_wait(next_wait_s)}")
+    return "cycle " + " | ".join(parts)
+
+
+def maturity_note(parked: int, min_age_minutes: float) -> str:
+    """Why a fresh run looks idle. Said once, not every cycle."""
+    return (f"[i] {parked} pools are parked because they are younger than the "
+            f"{min_age_minutes:g}-minute floor.\n"
+            f"    That is not a stall: the watchlist re-reads each one when it matures,\n"
+            f"    so the first real decisions land within about {min_age_minutes:g} "
+            f"minutes of a run starting.")
+
+
 def load_env(path: str = ".env"):
     """Tiny .env loader so the desk has no extra dependency. Real env vars win."""
     p = Path(path)

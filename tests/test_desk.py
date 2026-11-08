@@ -100,6 +100,26 @@ class WatchlistHolds(unittest.TestCase):
         self.assertEqual(self.w.due(0, 6), [])      # cannot re-read it, so stop trying
         self.assertEqual(self.w.size(), 0)
 
+    def test_pending_counts_only_pools_that_can_mature(self):
+        self.w.hold({"mint": "A", "pool": "P", "dex": "pump-fun", "symbol": "DOG"})
+        self.w.hold({"mint": "B", "pool": None, "dex": "pump-fun", "symbol": "NOADDR"})
+        parked, _ = self.w.pending(10)
+        self.assertEqual(parked, 1)                 # the addressless one never comes back
+
+    def test_pending_reports_the_next_maturing_pool(self):
+        self.w.hold({"mint": "A", "pool": "P", "dex": "pump-fun", "symbol": "DOG"})
+        parked, wait = self.w.pending(10)
+        self.assertEqual(parked, 1)
+        self.assertAlmostEqual(wait, 600, delta=5)  # 10-minute floor, just parked
+
+    def test_pending_is_never_negative_once_due(self):
+        self.w.hold({"mint": "A", "pool": "P", "dex": "pump-fun", "symbol": "DOG"})
+        _, wait = self.w.pending(0)                 # floor of zero: already mature
+        self.assertEqual(wait, 0.0)
+
+    def test_pending_on_an_empty_watchlist(self):
+        self.assertEqual(self.w.pending(10), (0, 0.0))
+
 
 class ChainFacts(unittest.TestCase):
     """The bonding curve's account must not count as a whale."""
@@ -242,6 +262,47 @@ class ModelIds(unittest.TestCase):
         fake = SimpleNamespace(messages=SimpleNamespace(parse=boom))
         with self.assertRaises(Fake500):
             analyst.analyze_token(token(), {}, {}, client=fake)
+
+
+class CycleLine(unittest.TestCase):
+    """A quiet cycle must read as parked-on-purpose, not as a hung process."""
+
+    def stats(self, **kw):
+        base = {"seen": 0, "benched": 0, "held": 0, "free_kills": 0, "chain_kills": 0,
+                "analyst_rejects": 0, "risk_rejects": 0, "entries": 0}
+        base.update(kw)
+        return base
+
+    def test_wait_formatting(self):
+        self.assertEqual(ops.human_wait(-30), "now")     # never "-30s"
+        self.assertEqual(ops.human_wait(0.4), "now")
+        self.assertEqual(ops.human_wait(9.6), "10s")
+        self.assertEqual(ops.human_wait(605), "10m 05s")
+
+    def test_parked_pools_are_named_with_their_wait(self):
+        line = ops.cycle_line(self.stats(seen=38), 1_000, parked=38, next_wait_s=605)
+        self.assertIn("38 seen", line)
+        self.assertIn("0 entries", line)
+        self.assertIn("38 parked, next in 10m 05s", line)
+        self.assertIn("equity $1,000.00", line)
+
+    def test_kills_and_rejections_are_summed_because_they_are_the_same_outcome(self):
+        line = ops.cycle_line(self.stats(free_kills=2, chain_kills=3,
+                                         analyst_rejects=1, risk_rejects=1), 940.5)
+        self.assertIn("5 killed", line)
+        self.assertIn("2 rejected", line)
+
+    def test_quiet_cycles_do_not_print_empty_counts(self):
+        line = ops.cycle_line(self.stats(seen=5), 1_000)
+        self.assertNotIn("killed", line)                # 0 killed is noise, not news
+        self.assertNotIn("rejected", line)
+        self.assertNotIn("parked", line)
+
+    def test_maturity_note_explains_the_wait_and_uses_the_real_floor(self):
+        note = ops.maturity_note(38, 10)
+        self.assertIn("38 pools", note)
+        self.assertIn("10-minute floor", note)
+        self.assertIn("not a stall", note)
 
 
 class PaperExits(unittest.TestCase):
