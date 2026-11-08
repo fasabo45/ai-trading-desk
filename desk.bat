@@ -20,6 +20,7 @@ if /i "%~1"=="stocks"        goto run_stocks
 if /i "%~1"=="review"        goto run_review
 if /i "%~1"=="review-claude" goto run_review_claude
 if /i "%~1"=="kill"          goto run_kill
+if /i "%~1"=="ui"            goto run_ui
 
 echo [!] Unknown command: %~1
 goto usage
@@ -59,6 +60,11 @@ echo. > KILL
 echo Wrote KILL. The desk stops on its next cycle.
 exit /b 0
 
+:run_ui
+rem Read-only browser view. Ctrl-C to stop. Extra args pass through: desk.bat ui --port 9000
+%PY% run_ui.py --open %2 %3 %4
+exit /b %ERRORLEVEL%
+
 :usage
 echo.
 echo   desk.bat ^<command^>
@@ -70,6 +76,7 @@ echo   stocks          Alpaca paper account, every 15 min while the market is op
 echo   review          weekly stats from journal.jsonl
 echo   review-claude   weekly stats plus a blunt written review ^(needs a key^)
 echo   kill            stop the desk on its next cycle
+echo   ui              read-only browser view of the desk
 echo.
 echo   From PowerShell: .\desk.bat test
 exit /b 1

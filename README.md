@@ -59,6 +59,29 @@ Stop everything, from anywhere:
 touch KILL                        # next cycle: close all, stop
 ```
 
+## See what it is doing
+
+```bash
+make ui                           # http://127.0.0.1:8787
+```
+
+A read-only window on the desk: the five seats as a funnel for the last cycle,
+equity per cycle, why tokens die, the watchlist counting down to maturity, open
+and closed positions, and the journal as a live feed. It polls every two seconds
+and draws only what the desk has already written down.
+
+Standard library only, so there is nothing extra to install, and it binds to
+loopback: this is your paper account, not a service. It implements no POST
+handler, which means it cannot trade, cannot clear the bench and cannot delete a
+position, even by accident.
+
+Useful in a second window while a run is in progress:
+
+```bash
+desk.bat ui                       # Windows
+desk.bat ui --port 9000           # or pick a port
+```
+
 ## 🧠 How it works
 
 <img src="assets/five-seats.png" alt="Five seats, one job each" width="100%">
@@ -182,13 +205,17 @@ ai-trading-desk/
 ├── run_crypto.py       the loop: scan → chain → analyst → risk → paper
 ├── run_stocks.py       Alpaca paper, OTO orders with the stop attached
 ├── review.py           weekly stats + optional Claude review
+├── run_ui.py           read-only browser view (stdlib http.server)
 ├── desk/
 │   ├── scanner.py      seat 1: GeckoTerminal + DexScreener
 │   ├── chain.py        seat 2: Solana RPC facts
 │   ├── analyst.py      seat 3: Claude, typed theses, untrusted-input wrapping
 │   ├── risk.py         seat 4: pure-code sizing and limits
 │   ├── broker.py       seat 5: paper broker + rule-based exits
+│   ├── watchlist.py    pools held until they are old enough to judge
+│   ├── telemetry.py    journal + watchlist + ledger, assembled for the UI
 │   └── ops.py          journal, bench, Telegram, kill switch
+├── ui/                 the dashboard: one page, no framework, no build step
 ├── prompts/            manual mode: the same desk as a Claude Project
 ├── docs/               architecture, the full stack, research prompts
 ├── tests/              offline tests, no keys needed

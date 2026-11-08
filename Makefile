@@ -1,4 +1,4 @@
-.PHONY: test shadow paper stocks review review-claude kill
+.PHONY: test shadow paper stocks review review-claude kill ui
 
 test:            ## run the offline test suite
 	python -m unittest discover -s tests -v
@@ -20,3 +20,6 @@ review-claude:   ## weekly stats + a blunt written review
 
 kill:            ## stop the desk on its next cycle
 	touch KILL
+
+ui:              ## read-only browser view of the desk
+	python run_ui.py --open

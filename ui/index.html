@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Desk</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">◆</span>
+    <span class="brand-name">THE DESK</span>
+    <span class="brand-sub">five seats, one job each</span>
+  </div>
+  <div class="pills" id="pills"></div>
+  <div class="live" id="live"><span class="dot"></span><span id="live-text">connecting</span></div>
+</header>
+
+<section class="hero">
+  <div class="hero-main">
+    <div class="hero-label">EQUITY</div>
+    <div class="hero-value" id="equity">—</div>
+    <div class="hero-day" id="day">—</div>
+  </div>
+  <div class="hero-side">
+    <div class="mini"><span class="mini-label">CASH</span><span id="cash">—</span></div>
+    <div class="mini"><span class="mini-label">OPEN</span><span id="open-count">—</span></div>
+    <div class="mini"><span class="mini-label">CYCLES</span><span id="cycle-count">—</span></div>
+    <div class="mini"><span class="mini-label">LAST CYCLE</span><span id="cycle-age">—</span></div>
+  </div>
+</section>
+
+<main class="grid">
+
+  <section class="card span-2">
+    <h2>Equity <span class="hint" id="equity-hint"></span></h2>
+    <div class="chart" id="equity-chart"></div>
+  </section>
+
+  <section class="card">
+    <h2>The five seats <span class="hint">last cycle</span></h2>
+    <div class="funnel" id="funnel"></div>
+    <div class="funnel-foot" id="funnel-foot"></div>
+  </section>
+
+  <section class="card">
+    <h2>Why they die <span class="hint">all rejections, last 24h</span></h2>
+    <div class="wall" id="wall"></div>
+  </section>
+
+  <section class="card">
+    <h2>Watchlist <span class="hint">waiting to mature</span></h2>
+    <div class="watch-head">
+      <div class="watch-big" id="watch-parked">0</div>
+      <div class="watch-next" id="watch-next">nothing parked</div>
+    </div>
+    <div class="watch-list" id="watch-list"></div>
+  </section>
+
+  <section class="card">
+    <h2>Errors <span class="hint">by seat</span></h2>
+    <div class="wall" id="errors"></div>
+  </section>
+
+  <section class="card span-2">
+    <h2>Open positions <span class="hint" id="pos-hint"></span></h2>
+    <div class="table-wrap"><table id="positions"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Closed</h2>
+    <div class="table-wrap"><table id="closed"></table></div>
+  </section>
+
+  <section class="card span-3">
+    <h2>Live feed <span class="hint">journal, newest first</span></h2>
+    <div class="feed" id="feed"></div>
+  </section>
+
+</main>
+
+<div class="empty" id="empty" hidden>
+  <h3>The desk has not run a cycle yet</h3>
+  <p>This page reads <code>journal.jsonl</code>, <code>desk.db</code> and
+     <code>paper_ledger.json</code>. None of them have anything in them.</p>
+  <p>Start it with <code>desk.bat shadow</code> for one cycle, or
+     <code>desk.bat paper</code> to trade.</p>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
