@@ -79,11 +79,14 @@ def cycle(broker: PaperBroker, bench: Bench, watch: Watchlist,
             continue
 
         if (k := scanner.free_kill(t)):                       # pass 1: free
-            if k == "too_young":
-                watch.hold(t)                                 # not a no: a not yet
+            if k == "too_young":                              # not a no: a not yet
+                if watch.hold(t):                             # journal the first sight only
+                    journal("hold", mint=t["mint"], symbol=t["symbol"], reason=k, token=t)
                 stats["held"] += 1
             else:
                 bench.sit(t["mint"], k)
+                journal("reject", stage="free", mint=t["mint"], symbol=t["symbol"],
+                        reason=k, token=t)
                 stats["free"] += 1
             continue
         if chain_left <= 0 or analyst_left <= 0:
